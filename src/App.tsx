@@ -46,6 +46,7 @@ export default function App() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [isHost, setIsHost] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   
   // File transfer state
   const [sendFiles, setSendFiles] = useState<TransferFile[]>([]);
@@ -70,11 +71,20 @@ export default function App() {
       createOffer();
     });
 
+    socketRef.current.on('room-created', (id) => {
+      setRoomId(id);
+      setStatus('waiting');
+      setView('waiting');
+      setIsHost(true);
+      setIsConnecting(false);
+    });
+
     socketRef.current.on('room-joined', (id) => {
       setRoomId(id);
       setStatus('waiting');
       setView('waiting');
       setIsHost(false);
+      setIsConnecting(false);
     });
 
     socketRef.current.on('offer', async (offer) => {
@@ -99,6 +109,7 @@ export default function App() {
     socketRef.current.on('error', (msg) => {
       setError(msg);
       setStatus('error');
+      setIsConnecting(false);
     });
 
     return () => {
@@ -128,10 +139,7 @@ export default function App() {
 
   const handleCreateRoom = () => {
     const id = generateRoomId();
-    setRoomId(id);
-    setIsHost(true);
-    setView('waiting');
-    setStatus('waiting');
+    setIsConnecting(true);
     socketRef.current?.emit('create-room', id);
   };
 
@@ -141,7 +149,9 @@ export default function App() {
       setError('Please enter a valid 6-digit code');
       return;
     }
+    setError('');
     setIsHost(false);
+    setIsConnecting(true);
     socketRef.current?.emit('join-room', targetCode);
     stopScanner();
   };
@@ -467,10 +477,20 @@ export default function App() {
               >
                 <button
                   onClick={handleCreateRoom}
+                  disabled={isConnecting}
                   className={`w-full py-4 font-bold rounded-2xl transition-all flex items-center justify-center gap-2 group shadow-xl ${isDarkMode ? 'bg-white text-zinc-950 hover:bg-zinc-100' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200'}`}
                 >
-                  Create Room
-                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  {isConnecting ? (
+                    <>
+                      <RefreshCw className="w-5 h-5 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      Create Room
+                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                    </>
+                  )}
                 </button>
 
                 <div className="relative">
@@ -502,10 +522,17 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => handleJoinRoom()}
-                    disabled={inputRoomId.length !== 6}
-                    className={`w-full py-4 font-bold rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed ${isDarkMode ? 'bg-white/5 border border-white/10 text-white hover:bg-white/10' : 'bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200'}`}
+                    disabled={inputRoomId.length !== 6 || isConnecting}
+                    className={`w-full py-4 font-bold rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${isDarkMode ? 'bg-white/5 border border-white/10 text-white hover:bg-white/10' : 'bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200'}`}
                   >
-                    Join Room
+                    {isConnecting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Joining...
+                      </>
+                    ) : (
+                      'Join Room'
+                    )}
                   </button>
                 </div>
 
