@@ -51,6 +51,7 @@ export default function App() {
   
   // File transfer state
   const [sendFiles, setSendFiles] = useState<TransferFile[]>([]);
+  const sendFilesRef = useRef<TransferFile[]>([]);
   const [receiveFiles, setReceiveFiles] = useState<TransferFile[]>([]);
   const [isTransferring, setIsTransferring] = useState(false);
   const [activeTransferId, setActiveTransferId] = useState<string | null>(null);
@@ -68,6 +69,10 @@ export default function App() {
   useEffect(() => {
     roomIdRef.current = roomId;
   }, [roomId]);
+
+  useEffect(() => {
+    sendFilesRef.current = sendFiles;
+  }, [sendFiles]);
 
   useEffect(() => {
     socketRef.current = io();
@@ -361,18 +366,18 @@ export default function App() {
 
   const startSending = () => {
     if (isSendingRef.current) return;
+    isSendingRef.current = true;
     processQueue();
   };
 
   const processQueue = async () => {
-    const nextFile = sendFiles.find(f => f.status === 'pending');
+    const nextFile = sendFilesRef.current.find(f => f.status === 'pending');
     if (!nextFile || !dataChannelRef.current) {
       isSendingRef.current = false;
       setIsTransferring(false);
       return;
     }
 
-    isSendingRef.current = true;
     setIsTransferring(true);
     setActiveTransferId(nextFile.id);
     startTimeRef.current = Date.now();
