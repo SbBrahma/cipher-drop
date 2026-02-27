@@ -45,6 +45,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isHost, setIsHost] = useState(false);
   
   // File transfer state
   const [sendFiles, setSendFiles] = useState<TransferFile[]>([]);
@@ -67,6 +68,13 @@ export default function App() {
       setStatus('connected');
       setView('transfer');
       createOffer();
+    });
+
+    socketRef.current.on('room-joined', (id) => {
+      setRoomId(id);
+      setStatus('waiting');
+      setView('waiting');
+      setIsHost(false);
     });
 
     socketRef.current.on('offer', async (offer) => {
@@ -121,6 +129,7 @@ export default function App() {
   const handleCreateRoom = () => {
     const id = generateRoomId();
     setRoomId(id);
+    setIsHost(true);
     setView('waiting');
     setStatus('waiting');
     socketRef.current?.emit('create-room', id);
@@ -132,10 +141,8 @@ export default function App() {
       setError('Please enter a valid 6-digit code');
       return;
     }
-    setRoomId(targetCode);
+    setIsHost(false);
     socketRef.current?.emit('join-room', targetCode);
-    setStatus('waiting');
-    setView('waiting');
     stopScanner();
   };
 
@@ -530,28 +537,45 @@ export default function App() {
                 className="text-center space-y-8"
               >
                 <div className="space-y-2">
-                  <p className={`text-[10px] uppercase font-black tracking-widest ${isDarkMode ? 'text-white/40' : 'text-slate-400'}`}>Room Code</p>
+                  <p className={`text-[10px] uppercase font-black tracking-widest ${isDarkMode ? 'text-white/40' : 'text-slate-400'}`}>
+                    {isHost ? 'Room Code' : 'Connecting to Room'}
+                  </p>
                   <div className="flex items-center justify-center gap-4">
                     <span className="text-5xl font-mono font-black tracking-tighter">{roomId}</span>
-                    <button 
-                      onClick={copyRoomId}
-                      className={`p-3 rounded-xl transition-colors ${isDarkMode ? 'bg-white/10 hover:bg-white/20' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}
-                    >
-                      {copied ? <Check className="w-6 h-6 text-emerald-500" /> : <Copy className="w-6 h-6" />}
-                    </button>
+                    {isHost && (
+                      <button 
+                        onClick={copyRoomId}
+                        className={`p-3 rounded-xl transition-colors ${isDarkMode ? 'bg-white/10 hover:bg-white/20' : 'bg-slate-100 hover:bg-slate-200 text-slate-600'}`}
+                      >
+                        {copied ? <Check className="w-6 h-6 text-emerald-500" /> : <Copy className="w-6 h-6" />}
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex justify-center">
-                  <div className={`p-6 rounded-[2rem] shadow-xl ${isDarkMode ? 'bg-white' : 'bg-white border border-slate-100'}`}>
-                    <QRCodeSVG value={roomId} size={160} />
+                {isHost ? (
+                  <div className="flex justify-center">
+                    <div className={`p-6 rounded-[2rem] shadow-xl ${isDarkMode ? 'bg-white' : 'bg-white border border-slate-100'}`}>
+                      <QRCodeSVG value={roomId} size={160} />
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex justify-center py-12">
+                    <div className="relative">
+                      <div className={`w-24 h-24 rounded-full border-4 border-dashed animate-spin ${isDarkMode ? 'border-white/20' : 'border-indigo-200'}`} />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Wifi className={`w-8 h-8 animate-pulse ${isDarkMode ? 'text-white/40' : 'text-indigo-500'}`} />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex flex-col items-center gap-4">
                   <div className={`flex items-center gap-3 px-5 py-2.5 rounded-full border transition-colors ${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200'}`}>
                     <RefreshCw className={`w-4 h-4 animate-spin ${isDarkMode ? 'text-white/40' : 'text-indigo-500'}`} />
-                    <span className={`text-xs font-bold ${isDarkMode ? 'text-white/60' : 'text-slate-600'}`}>Waiting for peer...</span>
+                    <span className={`text-xs font-bold ${isDarkMode ? 'text-white/60' : 'text-slate-600'}`}>
+                      {isHost ? 'Waiting for peer...' : 'Establishing P2P connection...'}
+                    </span>
                   </div>
                   <button 
                     onClick={resetConnection}
