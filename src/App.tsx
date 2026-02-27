@@ -61,6 +61,7 @@ export default function App() {
   const startTimeRef = useRef<number>(0);
   const qrScannerRef = useRef<Html5Qrcode | null>(null);
   const isSendingRef = useRef<boolean>(false);
+  const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
 
   useEffect(() => {
     socketRef.current = io();
@@ -96,8 +97,14 @@ export default function App() {
     });
 
     socketRef.current.on('ice-candidate', async (candidate) => {
-      if (peerRef.current) {
-        await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      if (peerRef.current && peerRef.current.remoteDescription) {
+        try {
+          await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.error("Error adding ice candidate", e);
+        }
+      } else {
+        iceCandidatesQueue.current.push(candidate);
       }
     });
 
@@ -122,6 +129,7 @@ export default function App() {
     peerRef.current?.close();
     peerRef.current = null;
     dataChannelRef.current = null;
+    iceCandidatesQueue.current = [];
     setView('landing');
     setRoomId('');
     setStatus('disconnected');
@@ -200,7 +208,13 @@ export default function App() {
 
   const createPeerConnection = () => {
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
+      ]
     });
 
     pc.onicecandidate = (event) => {
@@ -289,6 +303,15 @@ export default function App() {
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
     const pc = createPeerConnection();
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
+    
+    // Process queued candidates
+    while (iceCandidatesQueue.current.length > 0) {
+      const candidate = iceCandidatesQueue.current.shift();
+      if (candidate) {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+    }
+
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     socketRef.current?.emit('answer', { roomId, answer });
@@ -297,6 +320,14 @@ export default function App() {
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
     if (peerRef.current) {
       await peerRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+      
+      // Process queued candidates
+      while (iceCandidatesQueue.current.length > 0) {
+        const candidate = iceCandidatesQueue.current.shift();
+        if (candidate) {
+          await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+      }
     }
   };
 
