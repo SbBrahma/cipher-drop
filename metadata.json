@@ -1,0 +1,5 @@
+{
+  "name": "CipherDrop",
+  "description": "CipherDrop – Encrypted Peer-to-Peer File Transfer. Drop Files. Leave No Trace.",
+  "requestFramePermissions": ["camera"]
+}
