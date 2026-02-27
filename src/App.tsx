@@ -39,6 +39,7 @@ interface TransferFile {
 export default function App() {
   const [view, setView] = useState<ViewState>('landing');
   const [roomId, setRoomId] = useState('');
+  const roomIdRef = useRef('');
   const [inputRoomId, setInputRoomId] = useState('');
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [copied, setCopied] = useState(false);
@@ -53,6 +54,7 @@ export default function App() {
   const [receiveFiles, setReceiveFiles] = useState<TransferFile[]>([]);
   const [isTransferring, setIsTransferring] = useState(false);
   const [activeTransferId, setActiveTransferId] = useState<string | null>(null);
+  const activeTransferIdRef = useRef<string | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const peerRef = useRef<RTCPeerConnection | null>(null);
@@ -62,6 +64,10 @@ export default function App() {
   const qrScannerRef = useRef<Html5Qrcode | null>(null);
   const isSendingRef = useRef<boolean>(false);
   const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
+
+  useEffect(() => {
+    roomIdRef.current = roomId;
+  }, [roomId]);
 
   useEffect(() => {
     socketRef.current = io();
@@ -74,6 +80,7 @@ export default function App() {
 
     socketRef.current.on('room-created', (id) => {
       setRoomId(id);
+      roomIdRef.current = id;
       setStatus('waiting');
       setView('waiting');
       setIsHost(true);
@@ -82,6 +89,7 @@ export default function App() {
 
     socketRef.current.on('room-joined', (id) => {
       setRoomId(id);
+      roomIdRef.current = id;
       setStatus('waiting');
       setView('waiting');
       setIsHost(false);
@@ -124,6 +132,10 @@ export default function App() {
       stopScanner();
     };
   }, []);
+
+  useEffect(() => {
+    activeTransferIdRef.current = activeTransferId;
+  }, [activeTransferId]);
 
   const resetConnection = () => {
     peerRef.current?.close();
@@ -219,7 +231,7 @@ export default function App() {
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        socketRef.current?.emit('ice-candidate', { roomId, candidate: event.candidate });
+        socketRef.current?.emit('ice-candidate', { roomId: roomIdRef.current, candidate: event.candidate });
       }
     };
 
@@ -254,19 +266,21 @@ export default function App() {
           };
           setReceiveFiles(prev => [...prev, newFile]);
           setActiveTransferId(metadata.fileId);
+          activeTransferIdRef.current = metadata.fileId;
           receivedChunksRef.current[metadata.fileId] = [];
           setIsTransferring(true);
           startTimeRef.current = Date.now();
         }
       } else {
-        if (!activeTransferId) return;
+        const currentId = activeTransferIdRef.current;
+        if (!currentId) return;
         
-        receivedChunksRef.current[activeTransferId].push(event.data);
-        const chunks = receivedChunksRef.current[activeTransferId];
+        receivedChunksRef.current[currentId].push(event.data);
+        const chunks = receivedChunksRef.current[currentId];
         const receivedSize = chunks.reduce((acc, chunk) => acc + chunk.byteLength, 0);
         
         setReceiveFiles(prev => prev.map(f => {
-          if (f.id === activeTransferId) {
+          if (f.id === currentId) {
             const timeElapsed = (Date.now() - startTimeRef.current) / 1000;
             const speed = timeElapsed > 0 ? receivedSize / timeElapsed : 0;
             const progress = (receivedSize / f.size) * 100;
@@ -297,7 +311,7 @@ export default function App() {
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    socketRef.current?.emit('offer', { roomId, offer });
+    socketRef.current?.emit('offer', { roomId: roomIdRef.current, offer });
   };
 
   const handleOffer = async (offer: RTCSessionDescriptionInit) => {
@@ -314,7 +328,7 @@ export default function App() {
 
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-    socketRef.current?.emit('answer', { roomId, answer });
+    socketRef.current?.emit('answer', { roomId: roomIdRef.current, answer });
   };
 
   const handleAnswer = async (answer: RTCSessionDescriptionInit) => {
